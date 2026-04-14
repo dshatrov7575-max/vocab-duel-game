@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vocab Duel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f3f5f7; color: #222; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    h1 { margin-bottom: 8px; }
+    .note { color: #555; margin-bottom: 14px; }
+    .tabs { display: flex; gap: 8px; margin: 18px 0; flex-wrap: wrap; }
+    .tab-btn, button { padding: 10px 14px; border: 1px solid #c9ced6; border-radius: 10px; background: white; cursor: pointer; }
+    .tab-btn.active { background: #1f6feb; color: white; border-color: #1f6feb; }
+    .panel { display: none; background: white; border-radius: 16px; padding: 18px; box-shadow: 0 4px 18px rgba(0,0,0,.06); }
+    .panel.active { display: block; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .row > div { flex: 1 1 220px; }
+    label { display: block; font-weight: bold; margin-bottom: 6px; }
+    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #c9ced6; border-radius: 10px; box-sizing: border-box; }
+    textarea { min-height: 80px; resize: vertical; }
+    .card { border: 1px solid #e4e8ef; border-radius: 16px; padding: 18px; margin-top: 12px; background: #fafbfd; }
+    .big { font-size: 30px; font-weight: bold; margin-bottom: 8px; }
+    .sub { color: #4a5568; margin-bottom: 8px; }
+    .grid6 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 14px 0; }
+    @media (min-width: 900px) { .grid6 { grid-template-columns: repeat(3, 1fr); } }
+    .status { margin-top: 10px; padding: 10px 12px; background: #eef4ff; border-radius: 12px; }
+    .timer { font-size: 22px; font-weight: bold; }
+    .muted { color: #6b7280; }
+    .good { color: #1a7f37; }
+    .bad { color: #cf222e; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #d9dee6; padding: 8px; text-align: left; }
+    th { background: #f8fafc; }
+    .hidden { display: none; }
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #eef2ff; margin-right: 8px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Vocab Duel</h1>
+  <div class="note">Тренажёр русско-английского словаря: одиночный режим и сетевые дуэли. Источник слов — Google Sheets / CSV.</div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="single">Одиночный</button>
+    <button class="tab-btn" data-tab="network">Сетевой</button>
+  </div>
+
+  <div id="single" class="panel active">
+    <div class="row">
+      <div style="flex: 2 1 520px;">
+        <label>Google Sheet URL или CSV URL</label>
+        <input id="sheetUrl" placeholder="Можно оставить пустым — загрузится demo-словарь" />
+      </div>
+      <div style="flex: 0 1 160px; align-self: end;">
+        <button onclick="loadTopics()">Загрузить темы</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Тема</label>
+        <select id="topicSelect"></select>
+      </div>
+      <div style="align-self: end;">
+        <button onclick="startStudy()">Изучение</button>
+      </div>
+      <div style="align-self: end;">
+        <button onclick="startQuiz()">Проверка</button>
+      </div>
+    </div>
+
+    <div id="singleStatus" class="status">Сначала загрузите темы.</div>
+
+    <div id="studyBlock" class="card hidden">
+      <div class="pill" id="studyCounter"></div>
+      <div class="big" id="studyRu"></div>
+      <div class="sub">Перевод: <span id="studyEn"></span></div>
+      <div class="sub">Транскрипция: <span id="studyTr"></span></div>
+      <div class="row">
+        <div><button onclick="speakCurrentStudy()">Произнести</button></div>
+        <div><button onclick="prevStudy()">Назад</button></div>
+        <div><button onclick="nextStudy()">Далее</button></div>
+      </div>
+    </div>
+
+    <div id="quizBlock" class="card hidden">
+      <div class="row">
+        <div><span class="timer" id="quizTimer">00:00</span></div>
+        <div><span class="pill" id="quizCounter"></span></div>
+      </div>
+      <div class="big" id="quizRu"></div>
+      <div class="sub">Выберите правильный английский перевод из 6 вариантов.</div>
+      <div id="quizOptions" class="grid6"></div>
+      <div id="quizFeedback" class="status">Таймер включится после старта.</div>
+      <button id="nextQuizBtn" onclick="nextQuiz()" disabled>Далее</button>
+    </div>
+
+    <div id="themeHistoryWrap" class="card hidden">
+      <h3>История по теме</h3>
+      <table>
+        <thead><tr><th>Дата</th><th>Режим</th><th>Результат</th></tr></thead>
+        <tbody id="themeHistoryBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="network" class="panel">
+    <div id="authInfo" class="status">Загрузка конфигурации авторизации...</div>
+
+    <div class="card">
+      <h3>Профиль игрока</h3>
+      <div class="row">
+        <div><label>Имя</label><input id="profileName" /></div>
+        <div><label>Пол</label>
+          <select id="profileGender">
+            <option value="">Не указывать</option>
+            <option>Мужской</option>
+            <option>Женский</option>
+            <option>Другое</option>
+          </select>
+        </div>
+        <div><label>Уровень словаря</label>
+          <select id="profileLevel">
+            <option>1-1000</option>
+            <option>1-2000</option>
+            <option>1-3000</option>
+            <option>1-4000</option>
+            <option>1-5000</option>
+            <option>1-6000</option>
+            <option>1-7000</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div style="flex: 2 1 520px;">
+          <label>Коротко о себе</label>
+          <textarea id="profileAbout" placeholder="Например: Казахстан, инженер-строитель"></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <div><button id="googleLoginBtn" onclick="googleLogin()">Войти через Google</button></div>
+        <div><button onclick="saveProfile()">Сохранить профиль</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Поиск напарника</h3>
+      <div class="row">
+        <div style="flex: 2 1 520px;">
+          <label>Google Sheet URL или CSV URL</label>
+          <input id="sheetUrlNet" placeholder="Можно оставить пустым — demo-словарь" />
+        </div>
+        <div style="align-self: end;"><button onclick="loadTopics(true)">Загрузить темы</button></div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Тема для дуэли</label>
+          <select id="networkTopicSelect"></select>
+        </div>
+        <div style="align-self: end;"><button onclick="findPartner()">Ищу напарника моего уровня</button></div>
+      </div>
+      <div id="queueStatus" class="status">Сохраните профиль, затем можно искать соперника.</div>
+    </div>
+
+    <div id="networkQuizWrap" class="card hidden">
+      <h3>Сетевой матч</h3>
+      <div id="networkOpponentInfo" class="status"></div>
+      <div class="row">
+        <div><span class="timer" id="netTimer">00:00</span></div>
+        <div><span class="pill" id="netCounter"></span></div>
+      </div>
+      <div class="big" id="netRu"></div>
+      <div class="sub">Выберите правильный английский перевод.</div>
+      <div id="netOptions" class="grid6"></div>
+      <div id="netFeedback" class="status">После старта время пойдёт автоматически.</div>
+      <button id="nextNetBtn" onclick="nextNetQuestion()" disabled>Далее</button>
+    </div>
+
+    <div class="card">
+      <h3>История матчей</h3>
+      <table>
+        <thead><tr><th>Дата</th><th>Тема</th><th>Соперник</th><th>Исход</th><th>Ваше время</th><th>Лучшее время</th></tr></thead>
+        <tbody id="matchHistoryBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+let firebaseApp = null;
+let firebaseAuth = null;
+let googleProvider = null;
+
+const state = {
+  authMode: "guest",
+  firebaseEnabled: false,
+  idToken: null,
+  email: "",
+  user: null,
+  words: [],
+  topic: "",
+  studyIndex: 0,
+  quizOrder: [],
+  quizIndex: 0,
+  quizStartedAt: null,
+  quizTimerHandle: null,
+  quizAwaitNext: false,
+
+  networkWords: [],
+  networkTopic: "",
+  networkIndex: 0,
+  networkStartedAt: null,
+  networkTimerHandle: null,
+  networkAwaitNext: false,
+  queueId: null,
+  queuePollHandle: null,
+  matchId: null
+};
+
+function $(id) { return document.getElementById(id); }
+
+function formatSeconds(sec) {
+  const total = Math.max(0, Math.round(sec));
+  const mm = String(Math.floor(total / 60)).padStart(2, "0");
+  const ss = String(total % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function tabInit() {
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+      btn.classList.add("active");
+      $(btn.dataset.tab).classList.add("active");
+    });
+  });
+}
+
+function speakWord(word) {
+  if (!word) return;
+  try {
+    const utter = new SpeechSynthesisUtterance(word);
+    utter.lang = "en-US";
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || data.message || "API error");
+  }
+  return data;
+}
+
+function getGuestId() {
+  let gid = localStorage.getItem("vocab_guest_id");
+  if (!gid) {
+    gid = "guest-" + Math.random().toString(36).slice(2) + Date.now();
+    localStorage.setItem("vocab_guest_id", gid);
+  }
+  return gid;
+}
+
+function authPayload() {
+  return {
+    auth_token: state.idToken,
+    guest_id: state.idToken ? null : getGuestId(),
+    email: state.email || ""
+  };
+}
+
+async function initAuth() {
+  const cfg = await api("/api/config");
+  state.authMode = cfg.auth_mode;
+  state.firebaseEnabled = cfg.firebase_enabled;
+
+  if (cfg.firebase_enabled) {
+    try {
+      const firebase = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+      const authMod = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+      firebaseApp = firebase.initializeApp(cfg.firebase);
+      firebaseAuth = authMod.getAuth(firebaseApp);
+      googleProvider = new authMod.GoogleAuthProvider();
+      $("authInfo").innerHTML = "Google-авторизация включена. Можно войти через Google или использовать гостевой режим для теста.";
+      window.__firebaseAuthModule = authMod;
+    } catch (e) {
+      $("authInfo").innerHTML = "Не удалось загрузить Firebase JS. Доступен гостевой режим.";
+      console.error(e);
+    }
+  } else {
+    $("authInfo").innerHTML = "Сейчас активен гостевой режим. Для реальной Google-авторизации добавьте Firebase credentials в Colab.";
+    $("googleLoginBtn").disabled = true;
+  }
+
+  try {
+    const profile = await api(`/api/profile?guest_id=${encodeURIComponent(getGuestId())}`);
+    fillProfile(profile.user);
+    await refreshMatchHistory();
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+window.googleLogin = async function googleLogin() {
+  if (!firebaseAuth || !googleProvider || !window.__firebaseAuthModule) return;
+  const authMod = window.__firebaseAuthModule;
+  try {
+    const result = await authMod.signInWithPopup(firebaseAuth, googleProvider);
+    const user = result.user;
+    state.idToken = await user.getIdToken();
+    state.email = user.email || "";
+    $("authInfo").innerHTML = `Вход выполнен: <b>${user.displayName || user.email}</b>`;
+    $("profileName").value = $("profileName").value || (user.displayName || "");
+    await saveProfile();
+  } catch (e) {
+    alert("Ошибка входа через Google: " + e.message);
+  }
+};
+
+function fillProfile(user) {
+  if (!user) return;
+  state.user = user;
+  $("profileName").value = user.name || "";
+  $("profileGender").value = user.gender || "";
+  $("profileAbout").value = user.about || "";
+  $("profileLevel").value = user.level_band || "1-1000";
+}
+
+window.saveProfile = async function saveProfile() {
+  const payload = {
+    ...authPayload(),
+    name: $("profileName").value.trim(),
+    gender: $("profileGender").value,
+    about: $("profileAbout").value.trim(),
+    level_band: $("profileLevel").value
+  };
+  if (!payload.name) {
+    alert("Укажите имя.");
+    return;
+  }
+  const data = await api("/api/profile", { method: "POST", body: JSON.stringify(payload) });
+  fillProfile(data.user);
+  $("queueStatus").innerText = "Профиль сохранён. Можно искать соперника.";
+  await refreshMatchHistory();
+};
+
+async function loadTopics(networkMode = false) {
+  const url = networkMode ? $("sheetUrlNet").value.trim() : $("sheetUrl").value.trim();
+  const q = url ? `?sheet_url=${encodeURIComponent(url)}` : "";
+  const data = await api("/api/topics" + q);
+  const target = networkMode ? $("networkTopicSelect") : $("topicSelect");
+  target.innerHTML = "";
+  data.topics.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.topic;
+    opt.textContent = `${t.topic} (${t.count})`;
+    target.appendChild(opt);
+  });
+  if (data.topics.length === 0) {
+    throw new Error("Темы не найдены.");
+  }
+  if (!networkMode) {
+    $("singleStatus").innerText = `Загружено тем: ${data.topics.length}. Выберите тему.`;
+  } else {
+    $("queueStatus").innerText = `Темы загружены: ${data.topics.length}.`;
+  }
+}
+
+async function loadWordsForTopic(topic, networkMode = false) {
+  const url = networkMode ? $("sheetUrlNet").value.trim() : $("sheetUrl").value.trim();
+  const q = `topic=${encodeURIComponent(topic)}${url ? `&sheet_url=${encodeURIComponent(url)}` : ""}`;
+  const data = await api("/api/topic_words?" + q);
+  return data.words;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+window.startStudy = async function startStudy() {
+  const topic = $("topicSelect").value;
+  if (!topic) return;
+  state.words = await loadWordsForTopic(topic, false);
+  state.topic = topic;
+  state.studyIndex = 0;
+  $("studyBlock").classList.remove("hidden");
+  $("quizBlock").classList.add("hidden");
+  renderStudy();
+  await refreshThemeHistory(topic);
+};
+
+function renderStudy() {
+  const w = state.words[state.studyIndex];
+  $("studyCounter").innerText = `${state.studyIndex + 1} / ${state.words.length}`;
+  $("studyRu").innerText = w.ru;
+  $("studyEn").innerText = w.en;
+  $("studyTr").innerText = w.transcription;
+}
+window.prevStudy = function prevStudy() {
+  if (state.studyIndex > 0) state.studyIndex--;
+  renderStudy();
+};
+window.nextStudy = function nextStudy() {
+  if (state.studyIndex < state.words.length - 1) state.studyIndex++;
+  renderStudy();
+};
+window.speakCurrentStudy = function speakCurrentStudy() {
+  const w = state.words[state.studyIndex];
+  speakWord(w.en);
+};
+
+window.startQuiz = async function startQuiz() {
+  const topic = $("topicSelect").value;
+  if (!topic) return;
+  state.words = await loadWordsForTopic(topic, false);
+  state.topic = topic;
+  state.quizOrder = shuffle(state.words);
+  state.quizIndex = 0;
+  state.quizAwaitNext = false;
+  state.quizStartedAt = Date.now();
+  clearInterval(state.quizTimerHandle);
+  state.quizTimerHandle = setInterval(() => {
+    $("quizTimer").innerText = formatSeconds((Date.now() - state.quizStartedAt) / 1000);
+  }, 250);
+  $("quizBlock").classList.remove("hidden");
+  $("studyBlock").classList.add("hidden");
+  $("quizFeedback").innerText = "Выберите правильный ответ.";
+  $("nextQuizBtn").disabled = true;
+  renderQuizQuestion();
+};
+
+function pickOptions(correctWord, pool) {
+  const distractors = shuffle(pool.filter(x => x.en !== correctWord.en)).slice(0, 5).map(x => x.en);
+  return shuffle([correctWord.en, ...distractors]);
+}
+
+function renderQuizQuestion() {
+  const w = state.quizOrder[state.quizIndex];
+  $("quizCounter").innerText = `${state.quizIndex + 1} / ${state.quizOrder.length}`;
+  $("quizRu").innerText = w.ru;
+  $("quizOptions").innerHTML = "";
+  const opts = pickOptions(w, state.words);
+  opts.forEach(opt => {
+    const btn = document.createElement("button");
+    btn.textContent = opt;
+    btn.onclick = () => answerQuiz(opt);
+    $("quizOptions").appendChild(btn);
+  });
+}
+
+function answerQuiz(selected) {
+  if (state.quizAwaitNext) return;
+  const w = state.quizOrder[state.quizIndex];
+  if (selected === w.en) {
+    $("quizFeedback").innerHTML = `<span class="good">Верно.</span> ${w.en} — ${w.transcription}`;
+    speakWord(w.en);
+    state.quizAwaitNext = true;
+    $("nextQuizBtn").disabled = false;
+  } else {
+    $("quizFeedback").innerHTML = `<span class="bad">Неверно.</span> Попробуйте ещё раз.`;
+  }
+}
+
+window.nextQuiz = async function nextQuiz() {
+  if (!state.quizAwaitNext) return;
+  state.quizIndex += 1;
+  state.quizAwaitNext = false;
+  $("nextQuizBtn").disabled = true;
+  if (state.quizIndex >= state.quizOrder.length) {
+    clearInterval(state.quizTimerHandle);
+    const sec = (Date.now() - state.quizStartedAt) / 1000;
+    $("quizFeedback").innerHTML = `<span class="good">Тема пройдена за ${formatSeconds(sec)}.</span>`;
+    await api("/api/theme_attempt", {
+      method: "POST",
+      body: JSON.stringify({ ...authPayload(), topic: state.topic, seconds: sec, mode: "single" })
+    });
+    await refreshThemeHistory(state.topic);
+    return;
+  }
+  $("quizFeedback").innerText = "Выберите правильный ответ.";
+  renderQuizQuestion();
+};
+
+async function refreshThemeHistory(topic) {
+  $("themeHistoryWrap").classList.remove("hidden");
+  const params = new URLSearchParams({ topic });
+  if (state.idToken) params.append("auth_token", state.idToken);
+  else params.append("guest_id", getGuestId());
+  if (state.email) params.append("email", state.email);
+  const data = await api("/api/theme_history?" + params.toString());
+  $("themeHistoryBody").innerHTML = "";
+  data.items.forEach(item => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${item.played_at}</td><td>${item.mode}</td><td>${formatSeconds(item.seconds)}</td>`;
+    $("themeHistoryBody").appendChild(tr);
+  });
+}
+
+window.findPartner = async function findPartner() {
+  const topic = $("networkTopicSelect").value;
+  const levelBand = $("profileLevel").value;
+  if (!topic) {
+    alert("Выберите тему.");
+    return;
+  }
+  const payload = { ...authPayload(), topic, level_band: levelBand };
+  const res = await api("/api/find_partner", { method: "POST", body: JSON.stringify(payload) });
+  state.networkTopic = topic;
+  if (res.status === "matched") {
+    startNetworkMatch(res.match_id, res.opponent);
+    return;
+  }
+  state.queueId = res.queue_id;
+  $("queueStatus").innerText = "Идёт поиск соперника вашего уровня...";
+  clearInterval(state.queuePollHandle);
+  state.queuePollHandle = setInterval(checkQueue, 3000);
+};
+
+async function checkQueue() {
+  if (!state.queueId) return;
+  const params = new URLSearchParams({ queue_id: state.queueId });
+  if (state.idToken) params.append("auth_token", state.idToken);
+  else params.append("guest_id", getGuestId());
+  if (state.email) params.append("email", state.email);
+  const res = await api("/api/check_queue?" + params.toString());
+  if (res.status === "matched") {
+    clearInterval(state.queuePollHandle);
+    startNetworkMatch(res.match_id, res.opponent);
+  }
+}
+
+async function startNetworkMatch(matchId, opponent) {
+  state.matchId = matchId;
+  state.networkWords = await loadWordsForTopic(state.networkTopic, true);
+  state.networkWords = shuffle(state.networkWords);
+  state.networkIndex = 0;
+  state.networkAwaitNext = false;
+  state.networkStartedAt = Date.now();
+  clearInterval(state.networkTimerHandle);
+  state.networkTimerHandle = setInterval(() => {
+    $("netTimer").innerText = formatSeconds((Date.now() - state.networkStartedAt) / 1000);
+  }, 250);
+  $("networkOpponentInfo").innerHTML =
+    `Соперник: <b>${opponent.name || "Без имени"}</b> | ${opponent.level_band || ""} | ${opponent.about || "—"}`;
+  $("networkQuizWrap").classList.remove("hidden");
+  $("queueStatus").innerText = "Матч начался.";
+  $("nextNetBtn").disabled = true;
+  $("netFeedback").innerText = "Выберите правильный ответ.";
+  renderNetworkQuestion();
+}
+
+function renderNetworkQuestion() {
+  const w = state.networkWords[state.networkIndex];
+  $("netCounter").innerText = `${state.networkIndex + 1} / ${state.networkWords.length}`;
+  $("netRu").innerText = w.ru;
+  $("netOptions").innerHTML = "";
+  const opts = pickOptions(w, state.networkWords);
+  opts.forEach(opt => {
+    const btn = document.createElement("button");
+    btn.textContent = opt;
+    btn.onclick = () => answerNetwork(opt);
+    $("netOptions").appendChild(btn);
+  });
+}
+
+function answerNetwork(selected) {
+  if (state.networkAwaitNext) return;
+  const w = state.networkWords[state.networkIndex];
+  if (selected === w.en) {
+    $("netFeedback").innerHTML = `<span class="good">Верно.</span> ${w.en} — ${w.transcription}`;
+    speakWord(w.en);
+    state.networkAwaitNext = true;
+    $("nextNetBtn").disabled = false;
+  } else {
+    $("netFeedback").innerHTML = `<span class="bad">Неверно.</span> Попробуйте ещё раз.`;
+  }
+}
+
+window.nextNetQuestion = async function nextNetQuestion() {
+  if (!state.networkAwaitNext) return;
+  state.networkIndex += 1;
+  state.networkAwaitNext = false;
+  $("nextNetBtn").disabled = true;
+
+  if (state.networkIndex >= state.networkWords.length) {
+    clearInterval(state.networkTimerHandle);
+    const sec = (Date.now() - state.networkStartedAt) / 1000;
+    $("netFeedback").innerHTML = `<span class="good">Вы закончили за ${formatSeconds(sec)}. Ждём второй результат…</span>`;
+    const res = await api("/api/submit_match_result", {
+      method: "POST",
+      body: JSON.stringify({ ...authPayload(), match_id: state.matchId, seconds: sec })
+    });
+    await waitForMatchFinish();
+    await refreshMatchHistory();
+    return;
+  }
+  $("netFeedback").innerText = "Выберите правильный ответ.";
+  renderNetworkQuestion();
+};
+
+async function waitForMatchFinish() {
+  let tries = 0;
+  while (tries < 60) {
+    tries++;
+    const params = new URLSearchParams({ match_id: state.matchId });
+    if (state.idToken) params.append("auth_token", state.idToken);
+    else params.append("guest_id", getGuestId());
+    if (state.email) params.append("email", state.email);
+    const res = await api("/api/match?" + params.toString());
+    if (res.match.status === "finished") {
+      const myId = state.idToken ? null : getGuestId();
+      const winnerId = res.match.winner_user_id;
+      let myUserId = state.idToken ? res.players.find(p => p.email === state.email)?.user_id : getGuestId();
+      if (!myUserId && state.user?.user_id) myUserId = state.user.user_id;
+      const won = winnerId === myUserId;
+      $("netFeedback").innerHTML =
+        (won ? `<span class="good">Вы победили.</span>` : `<span class="bad">Вы проиграли.</span>`) +
+        ` Матч завершён.`;
+      return;
+    }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  $("netFeedback").innerText = "Ваш результат сохранён. Второй игрок ещё не завершил матч.";
+}
+
+async function refreshMatchHistory() {
+  const params = new URLSearchParams();
+  if (state.idToken) params.append("auth_token", state.idToken);
+  else params.append("guest_id", getGuestId());
+  if (state.email) params.append("email", state.email);
+
+  const data = await api("/api/match_history?" + params.toString());
+  $("matchHistoryBody").innerHTML = "";
+  data.items.forEach(item => {
+    const tr = document.createElement("tr");
+    const opponent = item.opponent?.name || "—";
+    const myResult = (item.results || []).find(x => x.user_id === (state.user?.user_id || getGuestId()));
+    const bestResult = (item.results || [])[0];
+    let outcome = "В процессе";
+    if (item.status === "finished") {
+      outcome = item.winner_user_id === (state.user?.user_id || getGuestId()) ? "Победа" : "Поражение";
+    }
+    tr.innerHTML = `
+      <td>${item.finished_at || item.created_at}</td>
+      <td>${item.topic}</td>
+      <td>${opponent}</td>
+      <td>${outcome}</td>
+      <td>${myResult ? formatSeconds(myResult.seconds) : "—"}</td>
+      <td>${bestResult ? formatSeconds(bestResult.seconds) : "—"}</td>`;
+    $("matchHistoryBody").appendChild(tr);
+  });
+}
+
+tabInit();
+loadTopics().catch(e => { $("singleStatus").innerText = e.message; });
+loadTopics(true).catch(e => { $("queueStatus").innerText = e.message; });
+initAuth().catch(e => {
+  $("authInfo").innerText = "Ошибка инициализации: " + e.message;
+  console.error(e);
+});
+</script>
+</body>
+</html>
