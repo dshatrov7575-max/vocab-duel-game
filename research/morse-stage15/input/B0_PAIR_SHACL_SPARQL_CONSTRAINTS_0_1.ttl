@@ -1,0 +1,198 @@
+@prefix ex: <urn:morse-stage14:> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:B0PairShape a sh:NodeShape ;
+  sh:targetClass ex:TransferPair ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "CASE_ID_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t .
+        ?s ex:caseId ?sv . ?t ex:caseId ?tv .
+        FILTER(?sv != ?tv)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "ANCHOR_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t .
+        ?s ex:anchorSha256 ?sv . ?t ex:anchorSha256 ?tv .
+        FILTER(?sv != ?tv)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "DISTINCTION_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t .
+        ?s ex:distinctionId ?sv . ?t ex:distinctionId ?tv .
+        FILTER(?sv != ?tv)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "UNSUPPORTED_DISTINCTION" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:profile ?p .
+        ?s ex:distinctionId ?d .
+        FILTER NOT EXISTS { ?p ex:supportsDistinction ?d }
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "MAPPING_VERSION_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:profile ?p ; (ex:source|ex:target) ?side .
+        ?p ex:requiredMappingVersion ?required .
+        ?side ex:mappingVersion ?actual .
+        FILTER(?actual != ?required)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "PROFILE_VERSION_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:profileVersion ?actual ; ex:profile ?p .
+        ?p ex:profileVersion ?required .
+        FILTER(?actual != ?required)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "PROJECTION_KIND_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t .
+        ?s ex:projectionKind ?sk . ?t ex:projectionKind ?tk .
+        FILTER(?sk != ?tk)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "EMPTY_SOURCE_CANDIDATE_SET" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s .
+        ?s ex:projectionKind "CANDIDATE_SET" .
+        FILTER NOT EXISTS { ?s ex:candidate ?c }
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "EMPTY_TARGET_CANDIDATE_SET" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:target ?t .
+        ?t ex:projectionKind "CANDIDATE_SET" .
+        FILTER NOT EXISTS { ?t ex:candidate ?c }
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "SOURCE_CANDIDATE_DROPPED" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t .
+        ?s ex:projectionKind "CANDIDATE_SET" ; ex:candidate ?c .
+        ?t ex:projectionKind "CANDIDATE_SET" .
+        FILTER NOT EXISTS { ?t ex:candidate ?c }
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "TARGET_CANDIDATE_OUTSIDE_ALLOWED_BOUND" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:target ?t .
+        ?t ex:projectionKind "CANDIDATE_SET" ; ex:candidate ?c .
+        FILTER NOT EXISTS { ?this ex:allowedCandidate ?c }
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "ABSTRACTION_WITHOUT_CHANGE_RECORD" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t ; ex:changeRecordPresent false .
+        ?s ex:projectionKind "CANDIDATE_SET" .
+        ?t ex:projectionKind "CANDIDATE_SET" ; ex:candidate ?c .
+        FILTER NOT EXISTS { ?s ex:candidate ?c }
+        FILTER EXISTS { ?s ex:candidate ?sourceCandidate }
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "CHANGE_RECORD_PROFILE_VERSION_MISMATCH" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ;
+              ex:changeRecordPresent true ;
+              ex:changeRecordProfileVersion ?recordVersion ;
+              ex:profileVersion ?pairVersion .
+        FILTER(?recordVersion != ?pairVersion)
+      }
+    """
+  ] ;
+
+  sh:sparql [
+    a sh:SPARQLConstraint ;
+    sh:message "SPECIAL_TRANSITION_NOT_ALLOWED" ;
+    sh:select """
+      PREFIX ex: <urn:morse-stage14:>
+      SELECT DISTINCT ?this WHERE {
+        ?this a ex:TransferPair ; ex:source ?s ; ex:target ?t ; ex:profile ?p .
+        ?s ex:projectionKind "SPECIAL_STATE" ; ex:specialState ?from .
+        ?t ex:projectionKind "SPECIAL_STATE" ; ex:specialState ?to .
+        FILTER NOT EXISTS {
+          ?p ex:allowedTransition ?tr .
+          ?tr ex:fromState ?from ; ex:toState ?to .
+        }
+      }
+    """
+  ] .
