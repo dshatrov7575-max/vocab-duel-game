@@ -7,6 +7,12 @@ on:
     paths:
       - ".github/workflows/morse_stage6_public_runner.yml"
       - "research/morse-stage6/**"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths:
+      - ".github/workflows/morse_stage6_public_runner.yml"
+      - "research/morse-stage6/**"
 
 permissions:
   contents: read
