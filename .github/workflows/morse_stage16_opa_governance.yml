@@ -52,6 +52,7 @@ jobs:
           echo "d1cdacbc9514c7b1faeb58f98a368e78f386da6e73075bcb58f4c1fdbabfd817  stage16_payload.tar.gz" | sha256sum -c -
           tar -xzf stage16_payload.tar.gz
           cp -R stage16_payload/. "$ROOT/"
+          cp research/morse-stage16/b0_governance_policy.rego "$ROOT/policy/b0_governance_policy.rego"
           python -m py_compile "$ROOT"/scripts/*.py
 
       - name: Install pinned OPA and verify checksum
