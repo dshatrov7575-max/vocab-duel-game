@@ -24,7 +24,7 @@ concurrency:
 jobs:
   acquire:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 25
     steps:
       - name: Checkout exact triggering commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -45,9 +45,9 @@ jobs:
 
       - name: Verify frozen acquisition-only guards
         run: |
-          python -m py_compile research/morse-stage6/acquire.py
+          python -m py_compile research/morse-stage6/acquire.py research/morse-stage6/acquire_fast.py
           grep -q 'case_selection_allowed.*False' research/morse-stage6/acquire.py
-          grep -q 'semantic_rules_changed.*False' research/morse-stage6/acquire.py
+          grep -q 'semantic_rules_changed.*False' research/morse-stage6/acquire_fast.py
           echo 'ACQUISITION_ONLY_GUARDS=PASS'
 
       - name: Download exact official bytes and derive text snapshots
@@ -58,7 +58,7 @@ jobs:
           set +e
           rm -rf generated/morse-stage6-source-vault
           mkdir -p generated/morse-stage6-source-vault
-          python research/morse-stage6/acquire.py generated/morse-stage6-source-vault > acquisition.log 2>&1
+          python research/morse-stage6/acquire_fast.py generated/morse-stage6-source-vault > acquisition.log 2>&1
           rc=$?
           set -e
           cat acquisition.log
