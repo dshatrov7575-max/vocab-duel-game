@@ -38,32 +38,35 @@ jobs:
           python-version: "3.13"
           check-latest: false
 
-      - name: Restore frozen Stage 15 payload
-        shell: bash
-        run: |
-          set -euo pipefail
-          base64 --decode research/morse-stage15/payload250.tar.gz.b64 > payload250.tar.gz
-          echo "4ee4113e39e549e44d8d8be963961655ec67f11a90ed5de1c11f278e199e07c7  payload250.tar.gz" | sha256sum -c -
-          mkdir -p stage15
-          tar -xzf payload250.tar.gz -C stage15
-          python -m py_compile stage15/scripts/run_pyshacl_external.py
-
       - name: Install pinned independent SHACL processor
         run: |
-          python -m pip install --disable-pip-version-check --no-input \
-            pyshacl==0.40.1
+          python -m pip install --disable-pip-version-check --no-input pyshacl==0.40.1
           python - <<'PY'
           import pyshacl, rdflib
           print("PYSHACL_VERSION=" + pyshacl.__version__)
           print("RDFLIB_VERSION=" + rdflib.__version__)
           PY
 
+      - name: Restore exact formal challenge from frozen generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf stage15
+          mkdir -p stage15/input stage15/scripts stage15/output
+          cp research/morse-stage15/input/* stage15/input/
+          cp research/morse-stage15/src/*.py stage15/scripts/
+          python -m py_compile stage15/scripts/*.py
+          PYTHONPATH=stage15/scripts python stage15/scripts/build_extended_challenge.py \
+            --profile stage15/input/B0_PAIR_EXTENDED_PROFILE_0_2.json \
+            --out stage15/input/EXTENDED_POLICY_PAIRS_250.jsonl
+          echo "5c8ad60bcfed43f447e4223c47405a6127ca4a33b31b95bcf7214f1b72ace18c  stage15/input/EXTENDED_POLICY_PAIRS_250.jsonl" | sha256sum -c -
+
       - name: Run full pySHACL validation
         shell: bash
         run: |
           set -euo pipefail
           cd stage15
-          python scripts/run_pyshacl_external.py | tee pyshacl_console.log
+          PYTHONPATH=scripts python scripts/run_pyshacl_external.py | tee pyshacl_console.log
           test -f output/MORSE_STAGE15_PYSHACL_RECEIPT_0_1.json
           grep -q '^STATUS=PASS$' output/SUMMARY.txt
 
