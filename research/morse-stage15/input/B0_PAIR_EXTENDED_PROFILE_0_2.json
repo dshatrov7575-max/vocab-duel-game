@@ -1,0 +1,34 @@
+{
+  "profile_id": "B0_PAIR_EXTENDED_PROFILE_0_2",
+  "profile_version": "0.2",
+  "required_mapping_version": "0.2",
+  "supported_distinctions": [
+    "E1_NEGATION_SCOPE",
+    "E2_MODALITY_FORCE",
+    "E3_CONDITION_OR_EXCEPTION",
+    "E4_QUANTITY_UNIT_COMPARATOR",
+    "E5_REFERENT_OR_ASSET",
+    "E6_ATTRIBUTION",
+    "E7_OBJECT_TYPE",
+    "E8_PHASE_TO_OUTCOME",
+    "E9_DISJUNCTION_SCOPE",
+    "E10_EPISTEMIC_FORCE"
+  ],
+  "special_states": ["ABSENT", "NOT_APPLICABLE", "UNSUPPORTED"],
+  "allowed_special_transitions": [
+    ["ABSENT", "ABSENT"],
+    ["NOT_APPLICABLE", "NOT_APPLICABLE"],
+    ["UNSUPPORTED", "UNSUPPORTED"],
+    ["ABSENT", "NOT_APPLICABLE"]
+  ],
+  "change_record_required_for_strict_abstraction": true,
+  "notes": [
+    "This is a synthetic, neutral mechanism-challenge profile, not a production domain profile.",
+    "The pair-specific allowed candidate set instantiates A_P,d(C_S); neither evaluator derives that bound from natural language."
+  ],
+  "guards": {
+    "human_gold": false,
+    "natural_error_measurement": false,
+    "production_ready": false
+  }
+}
