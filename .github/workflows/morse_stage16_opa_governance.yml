@@ -1,0 +1,149 @@
+name: MORSE Stage 16 generic governance verification
+
+on:
+  push:
+    branches:
+      - research/morse-stage16-opa-governance-20260730
+    paths:
+      - ".github/workflows/morse_stage16_opa_governance.yml"
+      - "research/morse-stage16/**"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths:
+      - ".github/workflows/morse_stage16_opa_governance.yml"
+      - "research/morse-stage16/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: morse-stage16-opa-governance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ROOT: research/morse-stage16
+  OPA_VERSION: "1.18.2"
+  PYTHONUTF8: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+          check-latest: false
+
+      - name: Restore frozen Stage 16 payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode research/morse-stage16/stage16_payload.tar.gz.b64 > stage16_payload.tar.gz
+          echo "d1cdacbc9514c7b1faeb58f98a368e78f386da6e73075bcb58f4c1fdbabfd817  stage16_payload.tar.gz" | sha256sum -c -
+          tar -xzf stage16_payload.tar.gz
+          cp -R stage16_payload/. "$ROOT/"
+          python -m py_compile "$ROOT"/scripts/*.py
+
+      - name: Install pinned OPA and verify checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o opa "https://openpolicyagent.org/downloads/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://openpolicyagent.org/downloads/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          expected="$(awk '{print $1}' opa.sha256)"
+          echo "${expected}  opa" | sha256sum -c -
+          chmod 755 opa
+          ./opa version
+          ./opa check --strict "$ROOT/policy/b0_governance_policy.rego"
+
+      - name: Build frozen 512-case challenge and typed reference result
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/build_governance_challenge.py"
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/morse_governance_reference.py"
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/run_local_reference.py"
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/build_ablation_inputs.py"
+
+      - name: Evaluate all 512 cases in OPA/Rego
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./opa eval --format=json \
+            --data "$ROOT/policy/b0_governance_policy.rego" \
+            --input "$ROOT/benchmark/OPA_INPUT_FULL.json" \
+            'data.b0.governance.decisions' > "$ROOT/results/OPA_FULL_512.json"
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/compare_opa_results.py" "$ROOT/results/OPA_FULL_512.json"
+
+      - name: Run rule ablation in OPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in "$ROOT"/benchmark/OPA_INPUT_DISABLE_*.json; do
+            code="${f##*/OPA_INPUT_DISABLE_}"
+            code="${code%.json}"
+            ./opa eval --format=json \
+              --data "$ROOT/policy/b0_governance_policy.rego" \
+              --input "$f" \
+              'data.b0.governance.decisions' > "$ROOT/results/OPA_DISABLE_${code}.json"
+          done
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/analyze_ablation.py"
+
+      - name: Build immutable scientific receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH="$ROOT/scripts" python "$ROOT/scripts/build_stage16_receipt.py" "$(pwd)/opa"
+          cat "$ROOT/results/SUMMARY.txt"
+          grep -q '^STATUS=PASS$' "$ROOT/results/SUMMARY.txt"
+
+      - name: Package one-day research artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf morse-stage16-opa-governance.tar.gz "$ROOT"
+          sha256sum morse-stage16-opa-governance.tar.gz > morse-stage16-opa-governance.tar.gz.sha256
+
+      - name: Upload one-day research artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: morse-stage16-opa-governance-${{ github.run_id }}
+          path: |
+            morse-stage16-opa-governance.tar.gz
+            morse-stage16-opa-governance.tar.gz.sha256
+            research/morse-stage16/results/MORSE_STAGE16_RECEIPT_0_1.json
+            research/morse-stage16/results/SUMMARY.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Enforce scientific guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('research/morse-stage16/results/MORSE_STAGE16_RECEIPT_0_1.json').read_text())
+          assert r['status']=='PASS', r
+          assert r['case_count']==512, r
+          assert r['opa_mismatch_count']==0, r
+          assert r['morse_reference_mismatch_count']==0, r
+          assert r['guards']['human_gold'] is False
+          assert r['guards']['natural_errors_measured'] is False
+          assert r['guards']['morse_effectiveness_measured'] is False
+          assert r['guards']['production_ready'] is False
+          assert r['guards']['automatic_merge'] is False
+          assert r['guards']['merge_performed'] is False
+          print('STAGE16_GOVERNANCE_VERIFICATION=PASS')
+          PY
