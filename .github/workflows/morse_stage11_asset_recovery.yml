@@ -7,6 +7,12 @@ on:
     paths:
       - ".github/workflows/morse_stage11_asset_recovery.yml"
       - "research/morse-stage11/**"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths:
+      - ".github/workflows/morse_stage11_asset_recovery.yml"
+      - "research/morse-stage11/**"
 
 permissions:
   contents: read
@@ -23,6 +29,7 @@ jobs:
       - name: Checkout exact triggering commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
