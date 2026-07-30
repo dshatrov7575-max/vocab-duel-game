@@ -1,0 +1,102 @@
+name: MORSE Stage 6 temporary public network runner
+
+on:
+  push:
+    branches:
+      - research/morse-stage6-source-acquisition-20260730
+    paths:
+      - ".github/workflows/morse_stage6_public_runner.yml"
+      - "research/morse-stage6/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: morse-stage6-public-runner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout exact triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+          check-latest: false
+
+      - name: Install exact dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --no-input \
+            requests==2.34.2 pypdf==6.14.2 beautifulsoup4==4.15.0 lxml==6.1.1
+
+      - name: Verify frozen acquisition-only guards
+        run: |
+          python -m py_compile research/morse-stage6/acquire.py
+          grep -q 'case_selection_allowed.*False' research/morse-stage6/acquire.py
+          grep -q 'semantic_rules_changed.*False' research/morse-stage6/acquire.py
+          echo 'ACQUISITION_ONLY_GUARDS=PASS'
+
+      - name: Download exact official bytes and derive text snapshots
+        id: acquisition
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          rm -rf generated/morse-stage6-source-vault
+          mkdir -p generated/morse-stage6-source-vault
+          python research/morse-stage6/acquire.py generated/morse-stage6-source-vault > acquisition.log 2>&1
+          rc=$?
+          set -e
+          cat acquisition.log
+          cp acquisition.log generated/morse-stage6-source-vault/ACQUISITION_CONSOLE.log
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Package immutable source vault
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f generated/morse-stage6-source-vault/ROOT_RECEIPT.json
+          tar -C generated -czf morse-stage6-source-vault.tar.gz morse-stage6-source-vault
+          sha256sum morse-stage6-source-vault.tar.gz > morse-stage6-source-vault.tar.gz.sha256
+
+      - name: Upload one-day research artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: morse-stage6-exact-source-acquisition-${{ github.run_id }}
+          path: |
+            morse-stage6-source-vault.tar.gz
+            morse-stage6-source-vault.tar.gz.sha256
+            generated/morse-stage6-source-vault/ROOT_RECEIPT.json
+            generated/morse-stage6-source-vault/SUMMARY.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Enforce receipt only after artifact preservation
+        if: always()
+        run: |
+          cat generated/morse-stage6-source-vault/SUMMARY.txt
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('generated/morse-stage6-source-vault/ROOT_RECEIPT.json').read_text())
+          assert r['case_selection_allowed'] is False
+          assert r['semantic_rules_changed'] is False
+          assert r['source_only_schema_changed'] is False
+          assert r['automatic_merge'] is False
+          assert r['merge_performed'] is False
+          assert r['component_success_count'] >= 1, r
+          if r['component_failure_count']:
+              raise SystemExit(f"PARTIAL_ACQUISITION={r['component_failure_count']} failed component(s); artifact retained")
+          print('EXACT_SOURCE_ACQUISITION=PASS')
+          PY
