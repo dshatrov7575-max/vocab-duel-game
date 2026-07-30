@@ -2,152 +2,169 @@ package b0.governance
 
 import rego.v1
 
-allowed_transition(src, tgt) if {
-    src == "MESSAGE"
-    tgt == "MESSAGE"
-}
-allowed_transition(src, tgt) if {
-    src == "MESSAGE"
-    tgt == "CLAIM"
-}
-allowed_transition(src, tgt) if {
-    src == "CLAIM"
-    tgt == "CLAIM"
-}
-allowed_transition(src, tgt) if {
-    src == "CLAIM"
-    tgt == "OBSERVATION"
-}
-allowed_transition(src, tgt) if {
-    src == "OBSERVATION"
-    tgt == "OBSERVATION"
-}
-allowed_transition(src, tgt) if {
-    src == "COMMAND"
-    tgt == "COMMAND"
-}
-allowed_transition(src, tgt) if {
-    src == "COMMAND"
-    tgt == "EXECUTION"
-}
-allowed_transition(src, tgt) if {
-    src == "EXECUTION"
-    tgt == "EXECUTION"
-}
-allowed_transition(src, tgt) if {
-    src == "EXECUTION"
-    tgt == "OUTCOME"
-}
-allowed_transition(src, tgt) if {
-    src == "OUTCOME"
-    tgt == "OUTCOME"
-}
-allowed_transition(src, tgt) if {
-    src == "OUTCOME"
-    tgt == "VERIFICATION"
-}
-allowed_transition(src, tgt) if {
-    src == "VERIFICATION"
-    tgt == "VERIFICATION"
-}
+allowed_transition(src, tgt) if { src == "MESSAGE"; tgt == "MESSAGE" }
+allowed_transition(src, tgt) if { src == "MESSAGE"; tgt == "CLAIM" }
+allowed_transition(src, tgt) if { src == "CLAIM"; tgt == "CLAIM" }
+allowed_transition(src, tgt) if { src == "CLAIM"; tgt == "OBSERVATION" }
+allowed_transition(src, tgt) if { src == "OBSERVATION"; tgt == "OBSERVATION" }
+allowed_transition(src, tgt) if { src == "COMMAND"; tgt == "COMMAND" }
+allowed_transition(src, tgt) if { src == "COMMAND"; tgt == "EXECUTION" }
+allowed_transition(src, tgt) if { src == "EXECUTION"; tgt == "EXECUTION" }
+allowed_transition(src, tgt) if { src == "EXECUTION"; tgt == "OUTCOME" }
+allowed_transition(src, tgt) if { src == "OUTCOME"; tgt == "OUTCOME" }
+allowed_transition(src, tgt) if { src == "OUTCOME"; tgt == "VERIFICATION" }
+allowed_transition(src, tgt) if { src == "VERIFICATION"; tgt == "VERIFICATION" }
 
 is_disabled(code) if {
     code in object.get(input, "disabled_rules", [])
 }
 
-block_reason(c, "SOURCE_DAMAGED") if {
-    not is_disabled("SOURCE_DAMAGED")
+block_codes := {
+    "SOURCE_DAMAGED",
+    "TRANSFER_FAILED",
+    "PROVENANCE_INVALID",
+    "PROFILE_VERSION_MISMATCH",
+    "POLICY_VERSION_MISMATCH",
+    "HUMAN_CONFIRMATION_REJECTED",
+    "ILLEGAL_TYPE_PROMOTION",
+    "NOT_AUTHORIZED",
+    "CLAIM_EVIDENCE_MISSING",
+    "EXECUTION_EVIDENCE_MISSING",
+    "OUTCOME_EVIDENCE_MISSING",
+    "VERIFICATION_EVIDENCE_MISSING",
+    "AUDIT_CHAIN_INVALID",
+}
+
+hold_codes := {
+    "INPUT_INTERPRETATION_UNRESOLVED",
+    "TRANSFER_NOT_EVALUATED",
+    "UNSUPPORTED_DISTINCTION",
+    "AMBIGUITY_UNRESOLVED",
+    "HUMAN_CONFIRMATION_MISSING",
+    "AUTHORIZATION_UNKNOWN",
+}
+
+block_applies(c, code) if {
+    code == "SOURCE_DAMAGED"
+    not is_disabled(code)
     c.source_integrity != "INTACT"
 }
-hold_reason(c, "INPUT_INTERPRETATION_UNRESOLVED") if {
-    not is_disabled("INPUT_INTERPRETATION_UNRESOLVED")
-    c.input_interpretation != "VERIFIED"
-}
-block_reason(c, "TRANSFER_FAILED") if {
-    not is_disabled("TRANSFER_FAILED")
+block_applies(c, code) if {
+    code == "TRANSFER_FAILED"
+    not is_disabled(code)
     c.transfer_preservation == "FAIL"
 }
-hold_reason(c, "TRANSFER_NOT_EVALUATED") if {
-    not is_disabled("TRANSFER_NOT_EVALUATED")
-    c.transfer_preservation == "NOT_EVALUATED"
-}
-block_reason(c, "PROVENANCE_INVALID") if {
-    not is_disabled("PROVENANCE_INVALID")
+block_applies(c, code) if {
+    code == "PROVENANCE_INVALID"
+    not is_disabled(code)
     c.provenance_status != "VALID"
 }
-block_reason(c, "PROFILE_VERSION_MISMATCH") if {
-    not is_disabled("PROFILE_VERSION_MISMATCH")
+block_applies(c, code) if {
+    code == "PROFILE_VERSION_MISMATCH"
+    not is_disabled(code)
     not c.profile_version_match
 }
-block_reason(c, "POLICY_VERSION_MISMATCH") if {
-    not is_disabled("POLICY_VERSION_MISMATCH")
+block_applies(c, code) if {
+    code == "POLICY_VERSION_MISMATCH"
+    not is_disabled(code)
     not c.policy_version_match
 }
-hold_reason(c, "UNSUPPORTED_DISTINCTION") if {
-    not is_disabled("UNSUPPORTED_DISTINCTION")
-    c.support_status != "SUPPORTED"
-}
-hold_reason(c, "AMBIGUITY_UNRESOLVED") if {
-    not is_disabled("AMBIGUITY_UNRESOLVED")
-    c.ambiguity_status != "RESOLVED"
-}
-block_reason(c, "HUMAN_CONFIRMATION_REJECTED") if {
-    not is_disabled("HUMAN_CONFIRMATION_REJECTED")
+block_applies(c, code) if {
+    code == "HUMAN_CONFIRMATION_REJECTED"
+    not is_disabled(code)
     c.human_confirmation_required
     c.human_confirmation_status == "REJECTED"
 }
-hold_reason(c, "HUMAN_CONFIRMATION_MISSING") if {
-    not is_disabled("HUMAN_CONFIRMATION_MISSING")
-    c.human_confirmation_required
-    c.human_confirmation_status != "CONFIRMED"
-    c.human_confirmation_status != "REJECTED"
-}
-block_reason(c, "ILLEGAL_TYPE_PROMOTION") if {
-    not is_disabled("ILLEGAL_TYPE_PROMOTION")
+block_applies(c, code) if {
+    code == "ILLEGAL_TYPE_PROMOTION"
+    not is_disabled(code)
     not allowed_transition(c.source_type, c.target_type)
 }
-block_reason(c, "NOT_AUTHORIZED") if {
-    not is_disabled("NOT_AUTHORIZED")
+block_applies(c, code) if {
+    code == "NOT_AUTHORIZED"
+    not is_disabled(code)
     c.requires_authorization
     c.authorization_status == "NOT_AUTHORIZED"
 }
-hold_reason(c, "AUTHORIZATION_UNKNOWN") if {
-    not is_disabled("AUTHORIZATION_UNKNOWN")
-    c.requires_authorization
-    c.authorization_status != "AUTHORIZED"
-    c.authorization_status != "NOT_AUTHORIZED"
-}
-block_reason(c, "CLAIM_EVIDENCE_MISSING") if {
-    not is_disabled("CLAIM_EVIDENCE_MISSING")
+block_applies(c, code) if {
+    code == "CLAIM_EVIDENCE_MISSING"
+    not is_disabled(code)
     c.source_type == "CLAIM"
     c.target_type == "OBSERVATION"
     not c.evidence_admitted
 }
-block_reason(c, "EXECUTION_EVIDENCE_MISSING") if {
-    not is_disabled("EXECUTION_EVIDENCE_MISSING")
+block_applies(c, code) if {
+    code == "EXECUTION_EVIDENCE_MISSING"
+    not is_disabled(code)
     c.source_type == "COMMAND"
     c.target_type == "EXECUTION"
     not c.execution_evidence
 }
-block_reason(c, "OUTCOME_EVIDENCE_MISSING") if {
-    not is_disabled("OUTCOME_EVIDENCE_MISSING")
+block_applies(c, code) if {
+    code == "OUTCOME_EVIDENCE_MISSING"
+    not is_disabled(code)
     c.source_type == "EXECUTION"
     c.target_type == "OUTCOME"
     not c.outcome_evidence
 }
-block_reason(c, "VERIFICATION_EVIDENCE_MISSING") if {
-    not is_disabled("VERIFICATION_EVIDENCE_MISSING")
+block_applies(c, code) if {
+    code == "VERIFICATION_EVIDENCE_MISSING"
+    not is_disabled(code)
     c.source_type == "OUTCOME"
     c.target_type == "VERIFICATION"
     not c.verification_evidence
 }
-block_reason(c, "AUDIT_CHAIN_INVALID") if {
-    not is_disabled("AUDIT_CHAIN_INVALID")
+block_applies(c, code) if {
+    code == "AUDIT_CHAIN_INVALID"
+    not is_disabled(code)
     not c.audit_chain_valid
 }
 
-block_reasons(c) := {r | block_reason(c, r)}
-hold_reasons(c) := {r | hold_reason(c, r)}
+hold_applies(c, code) if {
+    code == "INPUT_INTERPRETATION_UNRESOLVED"
+    not is_disabled(code)
+    c.input_interpretation != "VERIFIED"
+}
+hold_applies(c, code) if {
+    code == "TRANSFER_NOT_EVALUATED"
+    not is_disabled(code)
+    c.transfer_preservation == "NOT_EVALUATED"
+}
+hold_applies(c, code) if {
+    code == "UNSUPPORTED_DISTINCTION"
+    not is_disabled(code)
+    c.support_status != "SUPPORTED"
+}
+hold_applies(c, code) if {
+    code == "AMBIGUITY_UNRESOLVED"
+    not is_disabled(code)
+    c.ambiguity_status != "RESOLVED"
+}
+hold_applies(c, code) if {
+    code == "HUMAN_CONFIRMATION_MISSING"
+    not is_disabled(code)
+    c.human_confirmation_required
+    c.human_confirmation_status != "CONFIRMED"
+    c.human_confirmation_status != "REJECTED"
+}
+hold_applies(c, code) if {
+    code == "AUTHORIZATION_UNKNOWN"
+    not is_disabled(code)
+    c.requires_authorization
+    c.authorization_status != "AUTHORIZED"
+    c.authorization_status != "NOT_AUTHORIZED"
+}
+
+block_reasons(c) := {code |
+    some code in block_codes
+    block_applies(c, code)
+}
+
+hold_reasons(c) := {code |
+    some code in hold_codes
+    hold_applies(c, code)
+}
+
 all_reasons(c) := block_reasons(c) | hold_reasons(c)
 
 disposition(c) := "BLOCK" if {
@@ -159,7 +176,7 @@ disposition(c) := "BLOCK" if {
 decision(c) := {
     "case_id": c.case_id,
     "disposition": disposition(c),
-    "reason_codes": sort([r | r := all_reasons(c)[_]]),
+    "reason_codes": sort([r | some r in all_reasons(c)]),
 }
 
 decisions := [decision(c) | some c in input.cases]
